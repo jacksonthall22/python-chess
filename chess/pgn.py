@@ -15,6 +15,9 @@ import chess.svg
 from typing import Any, Callable, Dict, Generic, Iterable, Iterator, List, Literal, Mapping, MutableMapping, Set, TextIO, Tuple, Type, TypeVar, Optional, Union
 from chess import Color, Square
 
+if typing.TYPE_CHECKING:
+    from typing_extensions import Self
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -143,7 +146,7 @@ ResultT = TypeVar("ResultT", covariant=True)
 
 
 class TimeControlType(enum.Enum):
-    UNKNOW = 0
+    UNKNOWN = 0
     UNLIMITED = 1
     STANDARD = 2
     RAPID = 3
@@ -172,7 +175,7 @@ class TimeControl:
     """
 
     parts: list[TimeControlPart] = dataclasses.field(default_factory=list)
-    type: TimeControlType = TimeControlType.UNKNOW
+    type: TimeControlType = TimeControlType.UNKNOWN
 
 
 class _AcceptFrame:
@@ -1014,10 +1017,10 @@ class Headers(MutableMapping[str, str]):
     def __len__(self) -> int:
         return len(self._tag_roster) + len(self._others)
 
-    def copy(self: HeadersT) -> HeadersT:
+    def copy(self) -> Self:
         return type(self)(self)
 
-    def __copy__(self: HeadersT) -> HeadersT:
+    def __copy__(self) -> Self:
         return self.copy()
 
     def __repr__(self) -> str:

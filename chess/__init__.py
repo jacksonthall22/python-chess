@@ -25,7 +25,7 @@ import typing
 from typing import ClassVar, Callable, Counter, Dict, Generic, Hashable, Iterable, Iterator, List, Literal, Mapping, Optional, SupportsInt, Tuple, Type, TypeVar, Union
 
 if typing.TYPE_CHECKING:
-    from typing_extensions import TypeAlias
+    from typing_extensions import Self, TypeAlias
 
 
 EnPassantSpec = Literal["legal", "fen", "xfen"]
@@ -902,7 +902,9 @@ class BaseBoard:
         """
         return SquareSet(self.attacks_mask(square))
 
-    def _attackers_mask(self, color: Color, square: Square, occupied: Bitboard) -> Bitboard:
+    def attackers_mask(self, color: Color, square: Square, occupied: Optional[Bitboard] = None) -> Bitboard:
+        occupied = self.occupied if occupied is None else occupied
+
         rank_pieces = BB_RANK_MASKS[square] & occupied
         file_pieces = BB_FILE_MASKS[square] & occupied
         diag_pieces = BB_DIAG_MASKS[square] & occupied
@@ -920,27 +922,38 @@ class BaseBoard:
 
         return attackers & self.occupied_co[color]
 
-    def attackers_mask(self, color: Color, square: Square) -> Bitboard:
-        return self._attackers_mask(color, square, self.occupied)
-
-    def is_attacked_by(self, color: Color, square: Square) -> bool:
+    def is_attacked_by(self, color: Color, square: Square, occupied: Optional[IntoSquareSet] = None) -> bool:
         """
         Checks if the given side attacks the given square.
 
         Pinned pieces still count as attackers. Pawns that can be captured
         en passant are **not** considered attacked.
-        """
-        return bool(self.attackers_mask(color, square))
 
-    def attackers(self, color: Color, square: Square) -> SquareSet:
+        *occupied* determines which squares are considered to block attacks.
+        For example,
+        ``board.occupied ^ board.pieces_mask(chess.KING, board.turn)`` can be
+        used to consider X-ray attacks through the king.
+        Defaults to ``board.occupied`` (all pieces including the king,
+        no X-ray attacks).
+        """
+        return bool(self.attackers_mask(color, square, None if occupied is None else SquareSet(occupied).mask))
+
+    def attackers(self, color: Color, square: Square, occupied: Optional[IntoSquareSet] = None) -> SquareSet:
         """
         Gets the set of attackers of the given color for the given square.
 
         Pinned pieces still count as attackers.
 
+        *occupied* determines which squares are considered to block attacks.
+        For example,
+        ``board.occupied ^ board.pieces_mask(chess.KING, board.turn)`` can be
+        used to consider X-ray attacks through the king.
+        Defaults to ``board.occupied`` (all pieces including the king,
+        no X-ray attacks).
+
         Returns a :class:`set of squares <chess.SquareSet>`.
         """
-        return SquareSet(self.attackers_mask(color, square))
+        return SquareSet(self.attackers_mask(color, square, None if occupied is None else SquareSet(occupied).mask))
 
     def pin_mask(self, color: Color, square: Square) -> Bitboard:
         king = self.king(color)
@@ -1442,7 +1455,7 @@ class BaseBoard:
         self.occupied = f(self.occupied)
         self.promoted = f(self.promoted)
 
-    def transform(self: BaseBoardT, f: Callable[[Bitboard], Bitboard]) -> BaseBoardT:
+    def transform(self, f: Callable[[Bitboard], Bitboard]) -> Self:
         """
         Returns a transformed copy of the board (without move stack)
         by applying a bitboard transformation function.
@@ -1460,11 +1473,11 @@ class BaseBoard:
         board.apply_transform(f)
         return board
 
-    def apply_mirror(self: BaseBoardT) -> None:
+    def apply_mirror(self) -> None:
         self.apply_transform(flip_vertical)
         self.occupied_co[WHITE], self.occupied_co[BLACK] = self.occupied_co[BLACK], self.occupied_co[WHITE]
 
-    def mirror(self: BaseBoardT) -> BaseBoardT:
+    def mirror(self) -> Self:
         """
         Returns a mirrored copy of the board (without move stack).
 
@@ -1478,7 +1491,7 @@ class BaseBoard:
         board.apply_mirror()
         return board
 
-    def copy(self: BaseBoardT) -> BaseBoardT:
+    def copy(self) -> Self:
         """Creates a copy of the board."""
         board = type(self)(None)
 
@@ -1496,10 +1509,10 @@ class BaseBoard:
 
         return board
 
-    def __copy__(self: BaseBoardT) -> BaseBoardT:
+    def __copy__(self) -> Self:
         return self.copy()
 
-    def __deepcopy__(self: BaseBoardT, memo: Dict[int, object]) -> BaseBoardT:
+    def __deepcopy__(self, memo: Dict[int, object]) -> Self:
         board = self.copy()
         memo[id(self)] = board
         return board
@@ -1529,9 +1542,9 @@ class BaseBoard:
 
 BoardT = TypeVar("BoardT", bound="Board")
 
-class _BoardState(Generic[BoardT]):
+class _BoardState:
 
-    def __init__(self, board: BoardT) -> None:
+    def __init__(self, board: Board) -> None:
         self.pawns = board.pawns
         self.knights = board.knights
         self.bishops = board.bishops
@@ -1551,7 +1564,7 @@ class _BoardState(Generic[BoardT]):
         self.halfmove_clock = board.halfmove_clock
         self.fullmove_number = board.fullmove_number
 
-    def restore(self, board: BoardT) -> None:
+    def restore(self, board: Board) -> None:
         board.pawns = self.pawns
         board.knights = self.knights
         board.bishops = self.bishops
@@ -1681,14 +1694,14 @@ class Board(BaseBoard):
     manipulation.
     """
 
-    def __init__(self: BoardT, fen: Optional[str] = STARTING_FEN, *, chess960: bool = False) -> None:
+    def __init__(self, fen: Optional[str] = STARTING_FEN, *, chess960: bool = False) -> None:
         BaseBoard.__init__(self, None)
 
         self.chess960 = chess960
 
         self.ep_square = None
         self.move_stack = []
-        self._stack: List[_BoardState[BoardT]] = []
+        self._stack: List[_BoardState] = []
 
         if fen is None:
             self.clear()
@@ -1773,7 +1786,7 @@ class Board(BaseBoard):
         self.move_stack.clear()
         self._stack.clear()
 
-    def root(self: BoardT) -> BoardT:
+    def root(self) -> Self:
         """Returns a copy of the root position."""
         if self._stack:
             board = type(self)(None, chess960=self.chess960)
@@ -2291,13 +2304,10 @@ class Board(BaseBoard):
 
         return False
 
-    def _board_state(self: BoardT) -> _BoardState[BoardT]:
-        return _BoardState(self)
-
     def _push_capture(self, move: Move, capture_square: Square, piece_type: PieceType, was_promoted: bool) -> None:
         pass
 
-    def push(self: BoardT, move: Move) -> None:
+    def push(self, move: Move) -> None:
         """
         Updates the position with the given *move* and puts it onto the
         move stack.
@@ -2322,7 +2332,7 @@ class Board(BaseBoard):
         """
         # Push move and remember board state.
         move = self._to_chess960(move)
-        board_state = self._board_state()
+        board_state = _BoardState(self)
         self.castling_rights = self.clean_castling_rights()  # Before pushing stack
         self.move_stack.append(self._from_chess960(self.chess960, move.from_square, move.to_square, move.promotion, move.drop))
         self._stack.append(board_state)
@@ -2418,7 +2428,7 @@ class Board(BaseBoard):
         # Swap turn.
         self.turn = not self.turn
 
-    def pop(self: BoardT) -> Move:
+    def pop(self) -> Move:
         """
         Restores the previous position and returns the last move from the stack.
 
@@ -2828,7 +2838,7 @@ class Board(BaseBoard):
             if blacklisted in opcode:
                 raise ValueError(f"invalid character {blacklisted!r} in epd opcode: {opcode!r}")
 
-    def _parse_epd_ops(self: BoardT, operation_part: str, make_board: Callable[[], BoardT]) -> Dict[str, Union[None, str, int, float, Move, List[Move]]]:
+    def _parse_epd_ops(self, operation_part: str, make_board: Callable[[], Self]) -> Dict[str, Union[None, str, int, float, Move, List[Move]]]:
         operations: Dict[str, Union[None, str, int, float, Move, List[Move]]] = {}
         state = "opcode"
         opcode = ""
@@ -3723,7 +3733,7 @@ class Board(BaseBoard):
             self.generate_legal_ep(from_mask, to_mask))
 
     def _attacked_for_king(self, path: Bitboard, occupied: Bitboard) -> bool:
-        return any(self._attackers_mask(not self.turn, sq, occupied) for sq in scan_reversed(path))
+        return any(self.attackers_mask(not self.turn, sq, occupied) for sq in scan_reversed(path))
 
     def generate_castling_moves(self, from_mask: Bitboard = BB_ALL, to_mask: Bitboard = BB_ALL) -> Iterator[Move]:
         if self.is_variant_end():
@@ -3821,16 +3831,16 @@ class Board(BaseBoard):
         self.ep_square = None if self.ep_square is None else msb(f(BB_SQUARES[self.ep_square]))
         self.castling_rights = f(self.castling_rights)
 
-    def transform(self: BoardT, f: Callable[[Bitboard], Bitboard]) -> BoardT:
+    def transform(self, f: Callable[[Bitboard], Bitboard]) -> Self:
         board = self.copy(stack=False)
         board.apply_transform(f)
         return board
 
-    def apply_mirror(self: BoardT) -> None:
+    def apply_mirror(self) -> None:
         super().apply_mirror()
         self.turn = not self.turn
 
-    def mirror(self: BoardT) -> BoardT:
+    def mirror(self) -> Self:
         """
         Returns a mirrored copy of the board.
 
@@ -3845,7 +3855,7 @@ class Board(BaseBoard):
         board.apply_mirror()
         return board
 
-    def copy(self: BoardT, *, stack: Union[bool, int] = True) -> BoardT:
+    def copy(self, *, stack: Union[bool, int] = True) -> Self:
         """
         Creates a copy of the board.
 
