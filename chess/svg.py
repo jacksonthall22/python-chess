@@ -1,7 +1,23 @@
 from __future__ import annotations
 
+import os
 import math
 import xml.etree.ElementTree as ET
+
+# Prevent sub-SVGs from being prefixed with `ns0:` namespace
+# https://stackoverflow.com/a/3895958/7304977
+# https://stackoverflow.com/a/50350245/7304977
+namespaces = {
+    '':         'http://www.w3.org/2000/svg',
+    'soap':     'http://schemas.xmlsoap.org/soap/envelope/',
+    'xlink':    'http://www.w3.org/1999/xlink',
+    'xsi':      'http://www.w3.org/2001/XMLSchema-instance',
+    'xsd':      'http://www.w3.org/2001/XMLSchema',
+}
+for prefix, uri in namespaces.items():
+    ET.register_namespace(prefix, uri)
+
+
 
 import chess
 
@@ -12,20 +28,7 @@ from chess import Color, IntoSquareSet, Square
 SQUARE_SIZE = 45
 MARGIN = 20
 
-PIECES = {
-    "b": """<g id="black-bishop" class="black bishop" fill="none" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2zm6-4c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2zM25 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 1 1 5 0z" fill="#000" stroke-linecap="butt"/><path d="M17.5 26h10M15 30h15m-7.5-14.5v5M20 18h5" stroke="#fff" stroke-linejoin="miter"/></g>""",  # noqa: E501
-    "k": """<g id="black-king" class="black king" fill="none" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6" stroke-linejoin="miter"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5" fill="#000" stroke-linecap="butt" stroke-linejoin="miter"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z" fill="#000"/><path d="M20 8h5" stroke-linejoin="miter"/><path d="M32 29.5s8.5-4 6.03-9.65C34.15 14 25 18 22.5 24.5l.01 2.1-.01-2.1C20 18 9.906 14 6.997 19.85c-2.497 5.65 4.853 9 4.853 9M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0" stroke="#fff"/></g>""",  # noqa: E501
-    "n": """<g id="black-knight" class="black knight" fill="none" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M 22,10 C 32.5,11 38.5,18 38,39 L 15,39 C 15,30 25,32.5 23,18" style="fill:#000000; stroke:#000000;"/><path d="M 24,18 C 24.38,20.91 18.45,25.37 16,27 C 13,29 13.18,31.34 11,31 C 9.958,30.06 12.41,27.96 11,28 C 10,28 11.19,29.23 10,30 C 9,30 5.997,31 6,26 C 6,24 12,14 12,14 C 12,14 13.89,12.1 14,10.5 C 13.27,9.506 13.5,8.5 13.5,7.5 C 14.5,6.5 16.5,10 16.5,10 L 18.5,10 C 18.5,10 19.28,8.008 21,7 C 22,7 22,10 22,10" style="fill:#000000; stroke:#000000;"/><path d="M 9.5 25.5 A 0.5 0.5 0 1 1 8.5,25.5 A 0.5 0.5 0 1 1 9.5 25.5 z" style="fill:#ececec; stroke:#ececec;"/><path d="M 15 15.5 A 0.5 1.5 0 1 1 14,15.5 A 0.5 1.5 0 1 1 15 15.5 z" transform="matrix(0.866,0.5,-0.5,0.866,9.693,-5.173)" style="fill:#ececec; stroke:#ececec;"/><path d="M 24.55,10.4 L 24.1,11.85 L 24.6,12 C 27.75,13 30.25,14.49 32.5,18.75 C 34.75,23.01 35.75,29.06 35.25,39 L 35.2,39.5 L 37.45,39.5 L 37.5,39 C 38,28.94 36.62,22.15 34.25,17.66 C 31.88,13.17 28.46,11.02 25.06,10.5 L 24.55,10.4 z " style="fill:#ececec; stroke:none;"/></g>""",  # noqa: E501
-    "p": """<g id="black-pawn" class="black pawn"><path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="#000" stroke="#000" stroke-width="1.5" stroke-linecap="round"/></g>""",  # noqa: E501
-    "q": """<g id="black-queen" class="black queen" fill="#000" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><g fill="#000" stroke="none"><circle cx="6" cy="12" r="2.75"/><circle cx="14" cy="9" r="2.75"/><circle cx="22.5" cy="8" r="2.75"/><circle cx="31" cy="9" r="2.75"/><circle cx="39" cy="12" r="2.75"/></g><path d="M9 26c8.5-1.5 21-1.5 27 0l2.5-12.5L31 25l-.3-14.1-5.2 13.6-3-14.5-3 14.5-5.2-13.6L14 25 6.5 13.5 9 26zM9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z" stroke-linecap="butt"/><path d="M11 38.5a35 35 1 0 0 23 0" fill="none" stroke-linecap="butt"/><path d="M11 29a35 35 1 0 1 23 0M12.5 31.5h20M11.5 34.5a35 35 1 0 0 22 0M10.5 37.5a35 35 1 0 0 24 0" fill="none" stroke="#fff"/></g>""",  # noqa: E501
-    "r": """<g id="black-rook" class="black rook" fill="#000" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12.5 32l1.5-2.5h17l1.5 2.5h-20zM12 36v-4h21v4H12z" stroke-linecap="butt"/><path d="M14 29.5v-13h17v13H14z" stroke-linecap="butt" stroke-linejoin="miter"/><path d="M14 16.5L11 14h23l-3 2.5H14zM11 14V9h4v2h5V9h5v2h5V9h4v5H11z" stroke-linecap="butt"/><path d="M12 35.5h21M13 31.5h19M14 29.5h17M14 16.5h17M11 14h23" fill="none" stroke="#fff" stroke-width="1" stroke-linejoin="miter"/></g>""",  # noqa: E501
-    "B": """<g id="white-bishop" class="white bishop" fill="none" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><g fill="#fff" stroke-linecap="butt"><path d="M9 36c3.39-.97 10.11.43 13.5-2 3.39 2.43 10.11 1.03 13.5 2 0 0 1.65.54 3 2-.68.97-1.65.99-3 .5-3.39-.97-10.11.46-13.5-1-3.39 1.46-10.11.03-13.5 1-1.354.49-2.323.47-3-.5 1.354-1.94 3-2 3-2zM15 32c2.5 2.5 12.5 2.5 15 0 .5-1.5 0-2 0-2 0-2.5-2.5-4-2.5-4 5.5-1.5 6-11.5-5-15.5-11 4-10.5 14-5 15.5 0 0-2.5 1.5-2.5 4 0 0-.5.5 0 2zM25 8a2.5 2.5 0 1 1-5 0 2.5 2.5 0 1 1 5 0z"/></g><path d="M17.5 26h10M15 30h15m-7.5-14.5v5M20 18h5" stroke-linejoin="miter"/></g>""",  # noqa: E501
-    "K": """<g id="white-king" class="white king" fill="none" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22.5 11.63V6M20 8h5" stroke-linejoin="miter"/><path d="M22.5 25s4.5-7.5 3-10.5c0 0-1-2.5-3-2.5s-3 2.5-3 2.5c-1.5 3 3 10.5 3 10.5" fill="#fff" stroke-linecap="butt" stroke-linejoin="miter"/><path d="M11.5 37c5.5 3.5 15.5 3.5 21 0v-7s9-4.5 6-10.5c-4-6.5-13.5-3.5-16 4V27v-3.5c-3.5-7.5-13-10.5-16-4-3 6 5 10 5 10V37z" fill="#fff"/><path d="M11.5 30c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0m-21 3.5c5.5-3 15.5-3 21 0"/></g>""",  # noqa: E501
-    "N": """<g id="white-knight" class="white knight" fill="none" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M 22,10 C 32.5,11 38.5,18 38,39 L 15,39 C 15,30 25,32.5 23,18" style="fill:#ffffff; stroke:#000000;"/><path d="M 24,18 C 24.38,20.91 18.45,25.37 16,27 C 13,29 13.18,31.34 11,31 C 9.958,30.06 12.41,27.96 11,28 C 10,28 11.19,29.23 10,30 C 9,30 5.997,31 6,26 C 6,24 12,14 12,14 C 12,14 13.89,12.1 14,10.5 C 13.27,9.506 13.5,8.5 13.5,7.5 C 14.5,6.5 16.5,10 16.5,10 L 18.5,10 C 18.5,10 19.28,8.008 21,7 C 22,7 22,10 22,10" style="fill:#ffffff; stroke:#000000;"/><path d="M 9.5 25.5 A 0.5 0.5 0 1 1 8.5,25.5 A 0.5 0.5 0 1 1 9.5 25.5 z" style="fill:#000000; stroke:#000000;"/><path d="M 15 15.5 A 0.5 1.5 0 1 1 14,15.5 A 0.5 1.5 0 1 1 15 15.5 z" transform="matrix(0.866,0.5,-0.5,0.866,9.693,-5.173)" style="fill:#000000; stroke:#000000;"/></g>""",  # noqa: E501
-    "P": """<g id="white-pawn" class="white pawn"><path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03-3 1.06-7.41 5.55-7.41 13.47h23c0-7.92-4.41-12.41-7.41-13.47 1.47-1.19 2.41-3 2.41-5.03 0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="#fff" stroke="#000" stroke-width="1.5" stroke-linecap="round"/></g>""",  # noqa: E501
-    "Q": """<g id="white-queen" class="white queen" fill="#fff" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12a2 2 0 1 1-4 0 2 2 0 1 1 4 0zM24.5 7.5a2 2 0 1 1-4 0 2 2 0 1 1 4 0zM41 12a2 2 0 1 1-4 0 2 2 0 1 1 4 0zM16 8.5a2 2 0 1 1-4 0 2 2 0 1 1 4 0zM33 9a2 2 0 1 1-4 0 2 2 0 1 1 4 0z"/><path d="M9 26c8.5-1.5 21-1.5 27 0l2-12-7 11V11l-5.5 13.5-3-15-3 15-5.5-14V25L7 14l2 12zM9 26c0 2 1.5 2 2.5 4 1 1.5 1 1 .5 3.5-1.5 1-1.5 2.5-1.5 2.5-1.5 1.5.5 2.5.5 2.5 6.5 1 16.5 1 23 0 0 0 1.5-1 0-2.5 0 0 .5-1.5-1-2.5-.5-2.5-.5-2 .5-3.5 1-2 2.5-2 2.5-4-8.5-1.5-18.5-1.5-27 0z" stroke-linecap="butt"/><path d="M11.5 30c3.5-1 18.5-1 22 0M12 33.5c6-1 15-1 21 0" fill="none"/></g>""",  # noqa: E501
-    "R": """<g id="white-rook" class="white rook" fill="#fff" fill-rule="evenodd" stroke="#000" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 39h27v-3H9v3zM12 36v-4h21v4H12zM11 14V9h4v2h5V9h5v2h5V9h4v5" stroke-linecap="butt"/><path d="M34 14l-3 3H14l-3-3"/><path d="M31 17v12.5H14V17" stroke-linecap="butt" stroke-linejoin="miter"/><path d="M31 29.5l1.5 2.5h-20l1.5-2.5"/><path d="M11 14h23" fill="none" stroke-linejoin="miter"/></g>""",  # noqa: E501
-}
+_PIECE_SETS = {}  # We will load the pieces dynamically
 
 COORDS = {
     "1": """<path d="M6.754 26.996h2.578v-8.898l-2.805.562v-1.437l2.79-.563h1.578v10.336h2.578v1.328h-6.72z"/>""",  # noqa: E501
@@ -197,7 +200,74 @@ def _coord(text: str, x: int, y: int, width: int, height: int, horizontal: bool,
     return t
 
 
-def piece(piece: chess.Piece, size: Optional[int] = None) -> str:
+def _piece_code(piece: chess.Piece, *, piece_set: str) -> str:
+    """
+    Return the piece "code", like `'wP'` or `'bN'`, for the given piece.
+    If `piece_set` is `'mono'`, the color prefix is omitted, like `'P'` or `'N'`.
+    """
+    if piece_set == 'mono':
+        return f'{chess.PIECE_SYMBOLS[piece.piece_type].upper()}'
+
+    return f'{chess.COLOR_NAMES[piece.color][0].lower()}{chess.PIECE_SYMBOLS[piece.piece_type].upper()}'
+
+def _piece_defs_id(piece: chess.Piece, *, piece_set: str) -> str:
+    """
+    Return an `id` attribute for the piece's SVG element that will be unique within
+    the generated SVG of a board, like `white-pawn` or `black-knight`. If
+    `piece_set` is `'mono'`, the color prefix is omitted, like `pawn` or `knight`.
+    """
+    if piece_set == 'mono':
+        return f'{chess.PIECE_NAMES[piece.piece_type].lower()}'
+
+    return f'{chess.COLOR_NAMES[piece.color].lower()}-{chess.PIECE_NAMES[piece.piece_type].lower()}'
+
+def load_pieces(piece_set: str) -> Dict[str, str]:
+    """
+    Loads piece SVGs from the specified piece set directory or from the cache.
+    Keys in the returned dict are piece "codes", like `'wP'` or `'bN'`, and values
+    are the content of the corresponding SVG file.
+
+    The `mono` piece set is special in that its pieces are all grayscale,
+    so there are only 6 files for each piece type, as opposed to 12 for each
+    piece type and color). Therefore the returned dict only has 6 elements instead
+    of 12 and should be handled separately by the caller:
+    
+    >>> load_pieces("mono")  # doctest: +SKIP
+    {
+      'B': '<svg>...</svg>',
+      'K': '<svg>...</svg>',
+      'N': '<svg>...</svg>',
+      'P': '<svg>...</svg>',
+      'Q': '<svg>...</svg>',
+      'R': '<svg>...</svg>'
+    }
+    """
+    if piece_set in _PIECE_SETS:
+        return _PIECE_SETS[piece_set]
+
+    PIECE_DIR = 'new_piece'  # TODO change back to 'piece'
+
+    pieces = {}
+    for piece_type in chess.PIECE_TYPES:
+        for color in chess.COLORS:
+            piece = chess.Piece(piece_type, color)
+            piece_code = _piece_code(piece, piece_set=piece_set)
+            if piece_code in pieces:
+                # This should only happen for `piece_set == 'mono'`
+                # assert piece_set == 'mono', f'Duplicate piece code for piece set {piece_set}'
+                continue
+
+            piece_set_dir = os.path.join(PIECE_DIR, piece_set)
+            piece_svg_file = os.path.join(piece_set_dir, f"{piece_code}.svg")
+            with open(piece_svg_file, "r") as f:
+                pieces[piece_code] = f.read()
+
+    # Update cached piece sets
+    _PIECE_SETS[piece_set] = pieces
+
+    return pieces
+
+def piece(piece: chess.Piece, size: Optional[int] = None, piece_set: str = "alpha") -> str:
     """
     Renders the given :class:`chess.Piece` as an SVG image.
 
@@ -210,23 +280,27 @@ def piece(piece: chess.Piece, size: Optional[int] = None) -> str:
         :alt: R
     """
     svg = _svg(SQUARE_SIZE, size)
-    svg.append(ET.fromstring(PIECES[piece.symbol()]))
+    piece_svg = load_pieces(piece_set)[_piece_code(piece, piece_set=piece_set)]
+    svg.append(ET.fromstring(piece_svg))
     return SvgWrapper(ET.tostring(svg).decode("utf-8"))
 
 
-def board(board: Optional[chess.BaseBoard] = None, *,
-          orientation: Color = chess.WHITE,
-          lastmove: Optional[chess.Move] = None,
-          check: Optional[Square] = None,
-          arrows: Iterable[Union[Arrow, Tuple[Square, Square]]] = [],
-          fill: Dict[Square, str] = {},
-          squares: Optional[IntoSquareSet] = None,
-          size: Optional[int] = None,
-          coordinates: bool = True,
-          colors: Dict[str, str] = {},
-          flipped: bool = False,
-          borders: bool = False,
-          style: Optional[str] = None) -> str:
+def board(
+    board: Optional[chess.BaseBoard] = None, *,
+    orientation: Color = chess.WHITE,
+    lastmove: Optional[chess.Move] = None,
+    check: Optional[Square] = None,
+    arrows: Iterable[Union[Arrow, Tuple[Square, Square]]] = [],
+    fill: Dict[Square, str] = {},
+    squares: Optional[IntoSquareSet] = None,
+    size: Optional[int] = None,
+    coordinates: bool = True,
+    colors: Dict[str, str] = {},
+    flipped: bool = False,
+    borders: bool = False,
+    style: Optional[str] = None,
+    piece_set: str = "alpha",
+) -> str:
     """
     Renders a board with pieces and/or selected squares as an SVG image.
 
@@ -292,11 +366,26 @@ def board(board: Optional[chess.BaseBoard] = None, *,
         asciiboard.text = str(board)
 
     defs = ET.SubElement(svg, "defs")
+    existing_piece_defs: set[str] = set()
     if board:
+        pieces = load_pieces(piece_set)
         for piece_color in chess.COLORS:
             for piece_type in chess.PIECE_TYPES:
                 if board.pieces_mask(piece_type, piece_color):
-                    defs.append(ET.fromstring(PIECES[chess.Piece(piece_type, piece_color).symbol()]))
+                    # Get the piece "code"
+                    piece = chess.Piece(piece_type, piece_color)
+                    piece_code = _piece_code(piece, piece_set=piece_set)
+                    piece_defs_id = _piece_defs_id(piece, piece_set=piece_set)
+                    if piece_defs_id in existing_piece_defs:
+                        # This should only happen for `piece_set == 'mono'`
+                        # assert piece_set == 'mono', f'Duplicate piece code for piece set {piece_set}'
+                        continue
+
+                    svg_content = pieces[piece_code]
+                    svg_element = ET.fromstring(svg_content)
+                    print(f'test: {svg_element.attrib = }')
+                    svg_element.set("id", piece_defs_id)
+                    defs.append(svg_element)
 
     squares = chess.SquareSet(squares) if squares else chess.SquareSet()
     if squares:
@@ -426,11 +515,14 @@ def board(board: Optional[chess.BaseBoard] = None, *,
         if board is not None:
             piece = board.piece_at(square)
             if piece:
-                href = f"#{chess.COLOR_NAMES[piece.color]}-{chess.PIECE_NAMES[piece.piece_type]}"
+                piece_defs_id = _piece_defs_id(piece, piece_set=piece_set)
+                href = f"#{piece_defs_id}"
                 ET.SubElement(svg, "use", {
                     "href": href,
                     "xlink:href": href,
                     "transform": f"translate({x:d}, {y:d})",
+                    "height": str(SQUARE_SIZE),
+                    "width": str(SQUARE_SIZE),
                 })
 
         # Render selected squares.
@@ -513,5 +605,11 @@ def board(board: Optional[chess.BaseBoard] = None, *,
                 "opacity": opacity if opacity < 1.0 else None,
                 "class": "arrow",
             }))
+
+    # TODO: Only sometimes, we get duplicate `xmlns`/`xmlns:xlink` attributes
+    # after we have combined multiple SVGs in the `<defs>` section.
+    # This just removes them manually for now - still breaks some piece sets
+    svg.attrib.pop('xmlns')
+    # svg.attrib.pop('xmlns:xlink')
 
     return SvgWrapper(ET.tostring(svg).decode("utf-8"))
