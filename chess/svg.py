@@ -1,8 +1,10 @@
 from __future__ import annotations
-
 import os
 import math
 import xml.etree.ElementTree as ET
+import chess
+from typing import Dict, Iterable, Optional, Tuple, Union
+
 
 # Prevent sub-SVGs from being prefixed with `ns0:` namespace
 # https://stackoverflow.com/a/3895958/7304977
@@ -18,12 +20,7 @@ for prefix, uri in namespaces.items():
     ET.register_namespace(prefix, uri)
 
 
-
-import chess
-
-from typing import Dict, Iterable, Optional, Tuple, Union
-from chess import Color, IntoSquareSet, Square
-
+THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
 SQUARE_SIZE = 45
 MARGIN = 20
@@ -72,16 +69,16 @@ DEFAULT_COLORS = {
 class Arrow:
     """Details of an arrow to be drawn."""
 
-    tail: Square
+    tail: chess.Square
     """Start square of the arrow."""
 
-    head: Square
+    head: chess.Square
     """End square of the arrow."""
 
     color: str
     """Arrow color."""
 
-    def __init__(self, tail: Square, head: Square, *, color: str = "green") -> None:
+    def __init__(self, tail: chess.Square, head: chess.Square, *, color: str = "green") -> None:
         self.tail = tail
         self.head = head
         self.color = color
@@ -249,6 +246,7 @@ def load_pieces(piece_set: str) -> Dict[str, str]:
         return _PIECE_SETS[piece_set]
 
     PIECE_DIR = 'new_piece'  # TODO change back to 'piece'
+    PIECE_SET_DIR = os.path.join(THIS_DIR, PIECE_DIR, piece_set)
 
     pieces = {}
     for piece_type in chess.PIECE_TYPES:
@@ -260,8 +258,7 @@ def load_pieces(piece_set: str) -> Dict[str, str]:
                 # assert piece_set == 'mono', f'Duplicate piece code for piece set {piece_set}'
                 continue
 
-            piece_set_dir = os.path.join(PIECE_DIR, piece_set)
-            piece_svg_file = os.path.join(piece_set_dir, f"{piece_code}.svg")
+            piece_svg_file = os.path.join(PIECE_SET_DIR, f"{piece_code}.svg")
             with open(piece_svg_file, "r") as f:
                 pieces[piece_code] = f.read()
 
@@ -290,12 +287,12 @@ def piece(piece: chess.Piece, size: Optional[int] = None, piece_set: str = "alph
 
 def board(
     board: Optional[chess.BaseBoard] = None, *,
-    orientation: Color = chess.WHITE,
+    orientation: chess.Color = chess.WHITE,
     lastmove: Optional[chess.Move] = None,
-    check: Optional[Square] = None,
-    arrows: Iterable[Union[Arrow, Tuple[Square, Square]]] = [],
-    fill: Dict[Square, str] = {},
-    squares: Optional[IntoSquareSet] = None,
+    check: Optional[chess.Square] = None,
+    arrows: Iterable[Union[Arrow, Tuple[chess.Square, chess.Square]]] = [],
+    fill: Dict[chess.Square, str] = {},
+    squares: Optional[chess.IntoSquareSet] = None,
     size: Optional[int] = None,
     coordinates: bool = True,
     colors: Dict[str, str] = {},
@@ -386,7 +383,6 @@ def board(
 
                     svg_content = pieces[piece_code]
                     svg_element = ET.fromstring(svg_content)
-                    print(f'test: {svg_element.attrib = }')
                     svg_element.set("id", piece_defs_id)
                     defs.append(svg_element)
 

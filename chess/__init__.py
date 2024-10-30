@@ -618,8 +618,8 @@ class Piece:
         return self.symbol()
 
     def _repr_svg_(self) -> str:
-        import chess.svg
-        return chess.svg.piece(self, size=45)
+        from . import svg
+        return svg.piece(self, size=45)
 
     @classmethod
     def from_symbol(cls, symbol: str) -> Piece:
